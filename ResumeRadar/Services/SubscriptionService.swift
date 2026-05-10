@@ -8,18 +8,16 @@ final class SubscriptionService {
     var screeningsUsedThisMonth: Int = 0
     var isLoading = false
 
-    private var _transactionListener: Task<Void, Never>?
+    private nonisolated(unsafe) var _transactionListener: Task<Void, Never>?
 
     init() {
+        loadUsageData()
         _transactionListener = listenForTransactions()
         Task { await checkCurrentSubscription() }
-        loadUsageData()
     }
 
-    nonisolated deinit {
-        Task { @MainActor in
-            _transactionListener?.cancel()
-        }
+    deinit {
+        _transactionListener?.cancel()
     }
 
     var canScreen: Bool {
@@ -56,7 +54,7 @@ final class SubscriptionService {
         switch result {
         case .success(let verification):
             if case .verified(let transaction) = verification {
-                await updateSubscriptionStatus(transaction)
+                updateSubscriptionStatus(transaction)
                 await transaction.finish()
             }
         case .userCancelled:
@@ -72,14 +70,17 @@ final class SubscriptionService {
         do {
             try await AppStore.sync()
             await checkCurrentSubscription()
-        } catch {}
+        } catch {
+            print("Restore purchases error: \(error.localizedDescription)")
+        }
     }
 
     private func listenForTransactions() -> Task<Void, Never> {
         Task.detached { [weak self] in
             for await result in Transaction.updates {
+                guard let self else { return }
                 if case .verified(let transaction) = result {
-                    await self?.updateSubscriptionStatus(transaction)
+                    await self.updateSubscriptionStatus(transaction)
                     await transaction.finish()
                 }
             }
@@ -89,7 +90,9 @@ final class SubscriptionService {
     private func checkCurrentSubscription() async {
         for await result in Transaction.currentEntitlements {
             if case .verified(let transaction) = result {
-                await updateSubscriptionStatus(transaction)
+                await MainActor.run {
+                    self.updateSubscriptionStatus(transaction)
+                }
             }
         }
     }

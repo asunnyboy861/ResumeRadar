@@ -22,6 +22,7 @@ final class Candidate {
     var weaknesses: [String]
     var aiSummary: String
     var aiGeneratedProbability: Double
+    @Relationship(deleteRule: .cascade, inverse: \RedFlag.candidate)
     var redFlags: [RedFlag]
     var status: CandidateStatus
     var notes: String

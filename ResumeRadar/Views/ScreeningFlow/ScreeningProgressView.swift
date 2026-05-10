@@ -37,7 +37,7 @@ struct ScreeningProgressView: View {
             Text("Analyzing resume \(screeningViewModel.currentScreeningIndex + 1) of \(screeningViewModel.totalResumes)")
                 .font(.headline)
 
-            if screeningViewModel.currentScreeningIndex < screeningViewModel.candidates.count {
+            if screeningViewModel.currentScreeningIndex >= 0 && screeningViewModel.currentScreeningIndex < screeningViewModel.candidates.count {
                 let candidate = screeningViewModel.candidates[screeningViewModel.currentScreeningIndex]
                 VStack(spacing: 8) {
                     Text(candidate.name)

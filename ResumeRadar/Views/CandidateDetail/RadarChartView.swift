@@ -9,7 +9,7 @@ struct RadarChartView: View {
     init(scores: [Double], labels: [String]) {
         self.scores = scores
         self.labels = labels
-        self.categories = min(scores.count, labels.count)
+        self.categories = max(1, min(scores.count, labels.count))
     }
 
     var body: some View {

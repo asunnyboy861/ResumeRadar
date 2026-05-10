@@ -11,7 +11,7 @@ final class ScreeningViewModel {
     var totalResumes = 0
     var errorMessage: String?
 
-    private let aiService: AIMatchingService
+    private var aiService: AIMatchingService
     let subscriptionService: SubscriptionService
 
     init(aiService: AIMatchingService, subscriptionService: SubscriptionService) {
@@ -19,8 +19,14 @@ final class ScreeningViewModel {
         self.subscriptionService = subscriptionService
     }
 
+    func updateAIService(_ service: AIMatchingService) {
+        aiService = service
+    }
+
     func uploadResumes(from urls: [URL], for job: JobDescription, modelContext: ModelContext) {
         for url in urls {
+            let accessing = url.startAccessingSecurityScopedResource()
+            defer { if accessing { url.stopAccessingSecurityScopedResource() } }
             guard let text = PDFExtractor.extractText(from: url) else { continue }
             let parsed = ResumeParserService.parse(text: text)
             let candidate = Candidate(
@@ -44,6 +50,10 @@ final class ScreeningViewModel {
     func startScreening(job: JobDescription, modelContext: ModelContext) async {
         guard subscriptionService.canScreen else {
             errorMessage = "Monthly screening limit reached. Upgrade to Pro for more."
+            return
+        }
+        guard !aiService.apiKey.isEmpty else {
+            errorMessage = "Please configure your API key in Settings > AI Configuration"
             return
         }
         isScreening = true

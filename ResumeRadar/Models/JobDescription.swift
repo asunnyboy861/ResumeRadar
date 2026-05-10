@@ -11,6 +11,7 @@ final class JobDescription {
     var minExperienceYears: Int
     var educationLevel: String
     var createdAt: Date
+    @Relationship(deleteRule: .cascade, inverse: \Candidate.job)
     var candidates: [Candidate]
 
     init(

@@ -4,47 +4,52 @@ import SwiftData
 struct JobInputView: View {
     @Environment(\.modelContext) private var modelContext
     @Environment(\.dismiss) private var dismiss
-    @State private var viewModel: JobViewModel
+    @AppStorage("ai_api_key") private var apiKey: String = ""
+    @AppStorage("ai_base_url") private var baseURL: String = "https://api.openai.com/v1"
+    @AppStorage("ai_model") private var aiModel: String = "gpt-4o-mini"
+    @State private var jobTitle: String = ""
+    @State private var jobDescriptionText: String = ""
+    @State private var requiredSkills: [String] = []
+    @State private var preferredSkills: [String] = []
+    @State private var minExperienceYears: Int = 0
+    @State private var educationLevel: String = ""
+    @State private var isParsing = false
+    @State private var parseError: String?
     @State private var savedJob: JobDescription?
     @State private var navigateToUpload = false
-
-    init() {
-        let aiService = AIMatchingService(apiKey: "")
-        _viewModel = State(wrappedValue: JobViewModel(aiService: aiService))
-    }
 
     var body: some View {
         NavigationStack {
             Form {
                 Section {
-                    TextField("Job Title", text: $viewModel.jobTitle)
-                    TextField("Paste Job Description...", text: $viewModel.jobDescriptionText, axis: .vertical)
+                    TextField("Job Title", text: $jobTitle)
+                    TextField("Paste Job Description...", text: $jobDescriptionText, axis: .vertical)
                         .lineLimit(5...12)
                 } header: {
                     HStack {
                         Text("Job Description")
                         Spacer()
-                        if viewModel.isParsing {
+                        if isParsing {
                             ProgressView()
                                 .controlSize(.small)
                         } else {
                             Button("AI Parse") {
-                                Task { await viewModel.parseJobDescription() }
+                                Task { await parseJobDescription() }
                             }
-                            .disabled(viewModel.jobDescriptionText.trimmingCharacters(in: .whitespaces).isEmpty)
+                            .disabled(jobDescriptionText.trimmingCharacters(in: .whitespaces).isEmpty || apiKey.isEmpty)
                         }
                     }
                 }
 
-                if !viewModel.requiredSkills.isEmpty || !viewModel.preferredSkills.isEmpty {
+                if !requiredSkills.isEmpty || !preferredSkills.isEmpty {
                     Section("Extracted Requirements") {
-                        if !viewModel.requiredSkills.isEmpty {
+                        if !requiredSkills.isEmpty {
                             VStack(alignment: .leading, spacing: 6) {
                                 Text("Required Skills")
                                     .font(.caption)
                                     .foregroundStyle(.secondary)
                                 FlowLayout(spacing: 6) {
-                                    ForEach(viewModel.requiredSkills, id: \.self) { skill in
+                                    ForEach(requiredSkills, id: \.self) { skill in
                                         Text(skill)
                                             .font(.caption)
                                             .padding(.horizontal, 8)
@@ -56,13 +61,13 @@ struct JobInputView: View {
                                 }
                             }
                         }
-                        if !viewModel.preferredSkills.isEmpty {
+                        if !preferredSkills.isEmpty {
                             VStack(alignment: .leading, spacing: 6) {
                                 Text("Preferred Skills")
                                     .font(.caption)
                                     .foregroundStyle(.secondary)
                                 FlowLayout(spacing: 6) {
-                                    ForEach(viewModel.preferredSkills, id: \.self) { skill in
+                                    ForEach(preferredSkills, id: \.self) { skill in
                                         Text(skill)
                                             .font(.caption)
                                             .padding(.horizontal, 8)
@@ -77,13 +82,13 @@ struct JobInputView: View {
                         HStack {
                             Text("Min Experience")
                             Spacer()
-                            Stepper("\(viewModel.minExperienceYears) years", value: $viewModel.minExperienceYears, in: 0...30)
+                            Stepper("\(minExperienceYears) years", value: $minExperienceYears, in: 0...30)
                         }
-                        TextField("Education Level", text: $viewModel.educationLevel)
+                        TextField("Education Level", text: $educationLevel)
                     }
                 }
 
-                if let error = viewModel.parseError {
+                if let error = parseError {
                     Section {
                         Text(error)
                             .foregroundStyle(.red)
@@ -99,11 +104,20 @@ struct JobInputView: View {
                 }
                 ToolbarItem(placement: .confirmationAction) {
                     Button("Next") {
-                        let job = viewModel.saveJob(modelContext: modelContext)
+                        let job = JobDescription(
+                            title: jobTitle,
+                            rawText: jobDescriptionText,
+                            requiredSkills: requiredSkills,
+                            preferredSkills: preferredSkills,
+                            minExperienceYears: minExperienceYears,
+                            educationLevel: educationLevel
+                        )
+                        modelContext.insert(job)
+                        try? modelContext.save()
                         savedJob = job
                         navigateToUpload = true
                     }
-                    .disabled(viewModel.jobTitle.isEmpty && viewModel.jobDescriptionText.isEmpty)
+                    .disabled(jobTitle.isEmpty && jobDescriptionText.isEmpty)
                 }
             }
             .navigationDestination(isPresented: $navigateToUpload) {
@@ -112,5 +126,27 @@ struct JobInputView: View {
                 }
             }
         }
+    }
+
+    private func parseJobDescription() async {
+        guard !apiKey.isEmpty else {
+            parseError = "Please configure your API key in Settings > AI Configuration"
+            return
+        }
+        guard !jobDescriptionText.trimmingCharacters(in: .whitespaces).isEmpty else { return }
+        isParsing = true
+        parseError = nil
+        do {
+            let aiService = AIMatchingService(apiKey: apiKey, baseURL: baseURL)
+            let parsed = try await aiService.parseJobDescription(text: jobDescriptionText)
+            jobTitle = parsed.title
+            requiredSkills = parsed.required_skills
+            preferredSkills = parsed.preferred_skills
+            minExperienceYears = parsed.min_experience_years
+            educationLevel = parsed.education_level
+        } catch {
+            parseError = error.localizedDescription
+        }
+        isParsing = false
     }
 }

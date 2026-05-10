@@ -5,10 +5,11 @@ import UniformTypeIdentifiers
 struct ResumeUploadView: View {
     let job: JobDescription
     @Environment(\.modelContext) private var modelContext
+    @AppStorage("ai_api_key") private var apiKey: String = ""
+    @AppStorage("ai_base_url") private var baseURL: String = "https://api.openai.com/v1"
     @State private var screeningViewModel: ScreeningViewModel
     @State private var showFilePicker = false
     @State private var showScreening = false
-    @State private var uploadedCount = 0
 
     init(job: JobDescription) {
         self.job = job
@@ -28,7 +29,11 @@ struct ResumeUploadView: View {
                 .foregroundStyle(.secondary)
                 .multilineTextAlignment(.center)
 
-            uploadZone
+            if apiKey.isEmpty {
+                apiKeyWarning
+            } else {
+                uploadZone
+            }
 
             if !screeningViewModel.candidates.isEmpty {
                 uploadedList
@@ -63,6 +68,27 @@ struct ResumeUploadView: View {
                 job: job
             )
         }
+        .onChange(of: apiKey) { _, newValue in
+            screeningViewModel.updateAIService(AIMatchingService(apiKey: newValue, baseURL: baseURL))
+        }
+        .onChange(of: baseURL) { _, newValue in
+            screeningViewModel.updateAIService(AIMatchingService(apiKey: apiKey, baseURL: newValue))
+        }
+    }
+
+    private var apiKeyWarning: some View {
+        VStack(spacing: 12) {
+            Image(systemName: "key.fill")
+                .font(.system(size: 32))
+                .foregroundStyle(AppColors.warningYellow)
+            Text("API Key Required")
+                .font(.headline)
+            Text("Configure your OpenAI API key in Settings > AI Configuration to enable AI screening")
+                .font(.subheadline)
+                .foregroundStyle(.secondary)
+                .multilineTextAlignment(.center)
+        }
+        .padding(.vertical, 32)
     }
 
     private var uploadZone: some View {
